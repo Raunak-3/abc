@@ -60,28 +60,43 @@ def categorize_keywords(keywords: List[str]) -> Dict[str, List[str]]:
     except Exception as e:
         return {"high": keywords[:len(keywords)//2], "low": keywords[len(keywords)//2:]}
 
-def get_resume_match_score(job_description: str, resume_text: str) -> int:
+def get_resume_match_score(job_description: str, resume_text: str) -> Dict[str, int]:
     """
-    Calculates a resume match score using Gemini.
+    Calculates resume match scores using Gemini.
     
     Args:
         job_description (str): The job description text
         resume_text (str): The resume text
         
     Returns:
-        int: Match score percentage (0-100)
+        Dict[str, int]: Dictionary containing overall and technical scores
         
     Raises:
         Exception: If Gemini API call fails
     """
     try:
-        prompt = f"Calculate a match score (percentage 0-100) between this job description and resume. Return only the number:\nJob Description: {job_description}\nResume: {resume_text}"
-        response = gemini_model.generate_content(prompt)
-        score = int(response.text.strip())
-        return max(0, min(100, score))  # Ensure score is between 0 and 100
+        # Get overall match score
+        overall_prompt = f"Calculate an overall match score (percentage 0-100) between this job description and resume. Return only the number:\nJob Description: {job_description}\nResume: {resume_text}"
+        overall_response = gemini_model.generate_content(overall_prompt)
+        overall_score = int(overall_response.text.strip())
+        overall_score = max(0, min(100, overall_score))
+
+        # Get technical skills match score
+        technical_prompt = f"Calculate a technical skills match score (percentage 0-100) between this job description and resume, focusing only on technical skills, tools, and technologies. Return only the number:\nJob Description: {job_description}\nResume: {resume_text}"
+        technical_response = gemini_model.generate_content(technical_prompt)
+        technical_score = int(technical_response.text.strip())
+        technical_score = max(0, min(100, technical_score))
+
+        return {
+            "overall_score": overall_score,
+            "technical_score": technical_score
+        }
     except Exception as e:
-        # Return a default score if API fails
-        return 50
+        # Return default scores if API fails
+        return {
+            "overall_score": 50,
+            "technical_score": 50
+        }
 
 def generate_tailored_resume_section(job_description: str, resume_section: str, instructions: str) -> str:
     """

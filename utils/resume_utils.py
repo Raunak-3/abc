@@ -50,3 +50,30 @@ def list_resumes() -> List[str]:
     """
     os.makedirs(RESUME_DIR, exist_ok=True)
     return [f for f in os.listdir(RESUME_DIR) if f.endswith(".json")]
+
+def save_uploaded_resume(uploaded_file, resume_name: str, resume_text: str) -> str:
+    """
+    Saves an uploaded resume PDF and its text content to the resumes directory.
+    
+    Args:
+        uploaded_file: Streamlit's UploadedFile object
+        resume_name: Name to save the resume as
+        resume_text: The extracted text from the resume
+        
+    Returns:
+        str: Path to the saved resume
+    """
+    os.makedirs(RESUME_DIR, exist_ok=True)
+    resume_path = os.path.join(RESUME_DIR, f"{resume_name}.json")
+    
+    with open(resume_path, "w") as f:
+        json.dump({
+            "pdf_path": os.path.join(RESUME_DIR, f"{resume_name}.pdf"),
+            "text": resume_text
+        }, f, indent=4)
+    
+    pdf_path = os.path.join(RESUME_DIR, f"{resume_name}.pdf")
+    with open(pdf_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
+    return resume_path
