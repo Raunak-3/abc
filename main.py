@@ -1,11 +1,12 @@
 import streamlit as st
-from utils import resume_utils, ui_utils, local_match_utils
+st.set_page_config(layout="wide")
+from utils import resume_utils, ui_utils, local_match_utils, resume_generator
 import PyPDF2
 import io
 import os
 import re
 
-st.set_page_config(layout="wide")
+
 st.title("Resume Tailoring Application")
 
 # Initialize session state
@@ -17,6 +18,12 @@ if 'pdf_uploaded' not in st.session_state:
     st.session_state['pdf_uploaded'] = False
 if 'resume_path' not in st.session_state:
     st.session_state['resume_path'] = None
+if 'categorized_keywords' not in st.session_state:
+    st.session_state['categorized_keywords'] = None
+if 'job_description' not in st.session_state:
+    st.session_state['job_description'] = None
+if 'job_title' not in st.session_state:
+    st.session_state['job_title'] = None
 
 # Load existing resumes
 existing_resumes = resume_utils.list_resumes()
@@ -68,7 +75,10 @@ with col2:
                     # Process with local matching
                     keywords = local_match_utils.extract_keywords_from_text(job_description)
                     categorized_keywords = local_match_utils.categorize_keywords(keywords)
-                    keyword_matches = local_match_utils.get_keyword_matches(keywords, st.session_state['resume_text'])
+                    # Store in session state
+                    st.session_state['categorized_keywords'] = categorized_keywords
+                    st.session_state['job_description'] = job_description
+                    st.session_state['job_title'] = job_title
                     
                     # Calculate scores
                     overall_score = local_match_utils.calculate_keyword_match_score(
@@ -87,8 +97,8 @@ with col2:
                     st.write(f"{technical_score}% match on technical skills")
                     
                     # Count matched keywords
-                    matched_count = sum(1 for v in keyword_matches.values() if v)
-                    total_count = len(keyword_matches)
+                    matched_count = sum(1 for v in local_match_utils.get_keyword_matches(keywords, st.session_state['resume_text']).values() if v)
+                    total_count = len(keywords)
                     
                     # Display keyword match summary
                     st.subheader("Keyword Match Analysis")
@@ -101,25 +111,39 @@ with col2:
                     
                     with col_high:
                         st.subheader("High Priority Keywords")
-                        for i, keyword in enumerate(categorized_keywords["high"]):
-                            matched = keyword_matches.get(keyword, False)
-                            st.checkbox(
-                                keyword, 
-                                value=matched,
-                                key=f"high_{i}_{keyword}",
-                                disabled=True
-                            )
+                        matched_high = []
+                        unmatched_high = []
+                        for keyword in categorized_keywords["high"]:
+                            if local_match_utils.get_keyword_matches(keywords, st.session_state['resume_text']).get(keyword, False):
+                                matched_high.append(f"✓ {keyword}")
+                            else:
+                                unmatched_high.append(f"✗ {keyword}")
+                        
+                        all_high_keywords = "\n".join(matched_high + unmatched_high)
+                        st.text_area(
+                            "Matched (✓) and Unmatched (✗) Technical Skills",
+                            value=all_high_keywords,
+                            height=200,
+                            key="high_priority_keywords"
+                        )
                     
                     with col_low:
                         st.subheader("Low Priority Keywords")
-                        for i, keyword in enumerate(categorized_keywords["low"]):
-                            matched = keyword_matches.get(keyword, False)
-                            st.checkbox(
-                                keyword,
-                                value=matched,
-                                key=f"low_{i}_{keyword}",
-                                disabled=True
-                            )
+                        matched_low = []
+                        unmatched_low = []
+                        for keyword in categorized_keywords["low"]:
+                            if local_match_utils.get_keyword_matches(keywords, st.session_state['resume_text']).get(keyword, False):
+                                matched_low.append(f"✓ {keyword}")
+                            else:
+                                unmatched_low.append(f"✗ {keyword}")
+                        
+                        all_low_keywords = "\n".join(matched_low + unmatched_low)
+                        st.text_area(
+                            "Matched (✓) and Unmatched (✗) Soft Skills",
+                            value=all_low_keywords,
+                            height=200,
+                            key="low_priority_keywords"
+                        )
                     
                     if overall_score < 70:
                         st.warning("Try to get your score above 70% to increase your chances!")
@@ -127,6 +151,64 @@ with col2:
                         st.write("1. Add missing keywords naturally in your resume")
                         st.write("2. Focus on adding technical skills that are missing")
                         st.write("3. Use similar terminology as the job description")
+                st.markdown("---")  # Add a separator
+                if st.button("🎯 Tailor Resume", key="tailor_resume_btn"):
+                    if 'categorized_keywords' not in st.session_state or not st.session_state['categorized_keywords']:
+                        st.error("Please analyze your resume first to extract keywords.")
+                        st.stop()
+
+                    with st.spinner("Generating tailored resume..."):
+                        # Personal information (you can make this configurable through UI later)
+                        personal_info = {
+                            "name": "Vishal Bansal",
+                            "location": "Bharatpur, RJ",
+                            "phone": "+91 9057291541",
+                            "email": "bvansal.vb@gmail.com",
+                            "linkedin": "www.linkedin.com/in/vishal-bansal-62a727192/",
+                            "github": "https://github.com/vishalbansal28",
+                            "website": "https://vishal-portfolio-tawny.vercel.app/"
+                        }
+                        
+                        education = {
+                            "institute": "National Institute Of Technology, Bhopal",
+                            "degree": "Bachelor of Technology",
+                            "major": "Electronics and Communication Engineering",
+                            "duration": "Nov 2020-April 2024",
+                            "cgpa": "7.58"
+                        }
+                        
+                        try:
+                            # Get technical and soft skills from categorized keywords
+                            technical_skills = st.session_state['categorized_keywords'].get("high", [])
+                            soft_skills = st.session_state['categorized_keywords'].get("low", [])
+                            
+                            if not technical_skills and not soft_skills:
+                                st.error("No keywords found. Please analyze your resume first.")
+                                st.stop()
+                            
+                            # Generate PDF resume
+                            pdf_path = resume_generator.generate_latex_resume(
+                                personal_info=personal_info,
+                                education=education,
+                                job_description=st.session_state['job_description'],
+                                job_title=st.session_state['job_title'],
+                                technical_skills=technical_skills,
+                                soft_skills=soft_skills
+                            )
+                            
+                            if pdf_path:
+                                # Add download button for the PDF file
+                                with open(pdf_path, "rb") as pdf_file:
+                                    st.download_button(
+                                        label="Download PDF Resume",
+                                        data=pdf_file,
+                                        file_name="tailored_resume.pdf",
+                                        mime="application/pdf"
+                                    )
+                            else:
+                                st.error("Failed to generate resume. Please check the error messages above.")
+                        except Exception as e:
+                            st.error(f"Error generating resume: {str(e)}")
             else:
                 st.warning("Please enter both job description and job title to analyze.")
     else:

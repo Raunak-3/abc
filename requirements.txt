@@ -3,3 +3,5 @@ PyPDF2==3.0.1
 google-generativeai==0.3.1
 python-dotenv==1.0.0
 spacy==3.7.2
+json5==0.9.14
+latex==0.7.0
