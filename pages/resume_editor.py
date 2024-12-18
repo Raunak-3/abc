@@ -10,7 +10,7 @@ def render_resume_editor():
     # Header with logo and match stats
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.image("assets/logo.png", width=150)  # Replace with your logo
+        st.title("Resume Editor")
     with col2:
         if 'matched_keywords' in st.session_state and 'total_keywords' in st.session_state:
             st.metric(
@@ -49,78 +49,96 @@ def render_resume_editor():
             st.text_input("GPA", key="gpa")
 
         with tabs[4]:
-            st.text_area("Technical Skills", key="tech_skills", height=100)
+            st.text_area("Technical Skills", key="technical_skills", height=100)
             st.text_area("Soft Skills", key="soft_skills", height=100)
 
     with col_preview:
-        st.markdown("### Preview")
-        # Create LaTeX content based on form inputs
-        latex_content = generate_latex()
-        
-        # Save LaTeX content to a temporary file
-        with tempfile.NamedTemporaryFile(suffix='.tex', delete=False, mode='w') as f:
-            f.write(latex_content)
-            tex_path = f.name
-
-        # Compile LaTeX to PDF
-        pdf_path = compile_latex(tex_path)
-        
-        if pdf_path:
-            # Display PDF preview (you'll need to implement PDF display)
-            st.markdown(f"PDF generated successfully at {pdf_path}")
-            
-            # Add download button
-            with open(pdf_path, "rb") as pdf_file:
-                st.download_button(
-                    label="Download Resume",
-                    data=pdf_file,
-                    file_name="resume.pdf",
-                    mime="application/pdf"
-                )
+        st.subheader("Resume Preview")
+        if st.button("Generate Resume"):
+            try:
+                latex_content = generate_latex()
+                pdf_path = compile_latex(latex_content)
+                if pdf_path:
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            "Download Resume",
+                            f,
+                            file_name="resume.pdf",
+                            mime="application/pdf"
+                        )
+                    st.success("Resume generated successfully!")
+            except Exception as e:
+                st.error(f"Error generating resume: {str(e)}")
 
 def generate_latex():
-    # Generate LaTeX content based on form inputs
-    latex_content = r"""
-    \documentclass[11pt,a4paper]{article}
-    \usepackage[utf8]{inputenc}
-    \usepackage[margin=1in]{geometry}
-    \usepackage{hyperref}
-    \begin{document}
-    
-    % Header
-    \begin{center}
-        \huge\textbf{""" + st.session_state.get('name', '') + r"""}\\[0.3cm]
-        \normalsize
-        """ + st.session_state.get('email', '') + r" | " + st.session_state.get('phone', '') + r" | " + st.session_state.get('location', '') + r"""\\
-        """ + st.session_state.get('linkedin', '') + r" | " + st.session_state.get('github', '') + r"""
-    \end{center}
-    
-    % Rest of the resume content...
-    \end{document}
-    """
-    return latex_content
+    # Generate LaTeX content from form inputs
+    latex_template = """\\documentclass{resume}
+\\usepackage[left=0.4 in,top=0.3in,right=0.4 in,bottom=0.3in]{geometry}
+\\name{%s}
+\\address{%s \\quad \\textbf{%s} \\quad \\href{mailto:%s}{%s}}
 
-def compile_latex(tex_path):
+\\begin{document}
+
+\\begin{rSection}{Education}
+%s
+\\end{rSection}
+
+\\begin{rSection}{Skills}
+\\begin{tabular}{ @{} >{\\bfseries}l @{\\hspace{2ex}} l }
+Technical:&%s\\\\
+Soft Skills:&%s\\\\
+\\end{tabular}\\\\
+\\end{rSection}
+
+\\begin{rSection}{Experience}
+%s
+\\end{rSection}
+
+\\end{document}
+"""
+    return latex_template % (
+        st.session_state.get('name', ''),
+        st.session_state.get('location', ''),
+        st.session_state.get('phone', ''),
+        st.session_state.get('email', ''),
+        st.session_state.get('email', ''),
+        st.session_state.get('education', ''),
+        st.session_state.get('technical_skills', ''),
+        st.session_state.get('soft_skills', ''),
+        st.session_state.get('experience', '')
+    )
+
+def compile_latex(latex_content):
     try:
-        # Ensure the output directory exists
-        output_dir = os.path.dirname(tex_path)
-        
-        # Run pdflatex
-        subprocess.run([
-            'pdflatex',
-            '-interaction=nonstopmode',
-            f'-output-directory={output_dir}',
-            tex_path
-        ], check=True)
-        
-        # Return the path to the generated PDF
-        return tex_path.replace('.tex', '.pdf')
-    except subprocess.CalledProcessError as e:
-        st.error(f"Error compiling LaTeX: {str(e)}")
-        return None
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Write tex content to temporary file
+            tex_path = os.path.join(temp_dir, "resume.tex")
+            with open(tex_path, "w", encoding="utf-8") as f:
+                f.write(latex_content)
+            
+            # Copy resume.cls to temp directory
+            cls_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resumes", "resume.cls")
+            if os.path.exists(cls_path):
+                subprocess.run(["copy", cls_path, temp_dir], shell=True, check=True)
+            
+            # Compile LaTeX
+            result = subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", tex_path],
+                cwd=temp_dir,
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                raise Exception(f"LaTeX compilation failed: {result.stderr}")
+            
+            pdf_path = os.path.join(temp_dir, "resume.pdf")
+            if os.path.exists(pdf_path):
+                return pdf_path
+            else:
+                raise Exception("PDF file not generated")
     except Exception as e:
-        st.error(f"Unexpected error: {str(e)}")
-        return None
+        raise Exception(f"Error compiling LaTeX: {str(e)}")
 
 if __name__ == "__main__":
     render_resume_editor()
