@@ -3,6 +3,7 @@ import os
 import tempfile
 import subprocess
 from pathlib import Path
+from pages.technical_skills_formatter import format_technical_skills
 
 def render_resume_editor():
     st.set_page_config(layout="wide")
@@ -23,6 +24,14 @@ def render_resume_editor():
     col_editor, col_preview = st.columns([1, 1])
 
     with col_editor:
+        st.title("Resume Editor")
+        
+        # Add Format Technical Skills button
+        if st.button("Format Technical Skills"):
+            if format_technical_skills():
+                st.session_state['should_render'] = True
+                st.rerun()
+        
         # Tabs for different sections
         tabs = st.tabs(["Resume Header", "Professional Summary", "Experience", "Education", "Skills"])
         
